@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Blind Assistant</title>
+    <style>
+        body { 
+            background-color: #f0f2f5; 
+            margin: 0; 
+            font-family: Arial, sans-serif; 
+        }
+        .screen { 
+            display: none; 
+            padding: 20px; 
+            min-height: 100vh; 
+            background: white; 
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1); 
+        }
+        .screen.active { 
+            display: block; 
+        }
+        h1 { 
+            text-align: center; 
+            color: #2c3e50; 
+            margin-bottom: 20px; 
+        }
+        p { 
+            text-align: center; 
+            font-size: 1.2rem; 
+        }
+        #camera-preview { 
+            width: 100%; 
+            max-height: 60vh; 
+            object-fit: cover; 
+            border-radius: 8px; 
+        }
+        #map { 
+            height: 60vh; 
+            border-radius: 8px; 
+        }
+        .btn { 
+            padding: 10px 20px; 
+            background: #3498db; 
+            color: white; 
+            border: none; 
+            border-radius: 4px; 
+            cursor: pointer; 
+            margin: 10px auto; 
+            display: block; 
+        }
+        .btn:hover { 
+            background: #2980b9; 
+        }
+        #home-screen,#object-screen,#nav-screen{
+            background-color: black;
+
+        }
+        #home-screen{
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-direction:column;
+        }
+    </style>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" />
+</head>
+<body>
+    <div id="home-screen" class="screen active">
+        <h1>Blind Assistant</h1>
+        
+        <dotlottie-player src="https://lottie.host/ce503f9e-4f40-4446-832e-18c94eb2e525/dKICgbs8hY.lottie" background="transparent" speed="1" style="width: 300px; height: 300px;" loop autoplay></dotlottie-player>
+
+        <p style="color:white;">Listening for commands...</p>
+    </div>
+    <div id="object-screen" class="screen">
+        <h1>Object Detection</h1>
+        <video id="camera-preview" autoplay playsinline></video>
+        <p id="detection-results">Waiting for detection...</p>
+        <button class="btn" onclick="captureImage()">Detect</button>
+    </div>
+    <div id="nav-screen" class="screen">
+        <h1>Navigation</h1>
+        <div id="map"></div>
+        <p id="nav-status">Waiting for destination...</p>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+    <script>
+        const screens = {
+            'home': document.getElementById('home-screen'),
+            'object_detection': document.getElementById('object-screen'),
+            'navigation': document.getElementById('nav-screen')
+        };
+        let cameraStream = null;
+        let map = null;
+        let routeLayer = null;
+        let currentStep = 0;
+        let lastSpoken = "";  // Track last spoken message
+        let lastResults = ""; // Track last detection results
+        let lastState = "";   // Track last state for page intimation
+        let isCommandListening = false; // Flag to control command recognition
+
+        // Speak function with repetition prevention
+        function speak(text) {
+            if (text === lastSpoken) return;
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.rate = 1.2;
+            utterance.pitch = 1.0;
+            utterance.volume = 1.0;
+            const voices = window.speechSynthesis.getVoices();
+            if (voices.length > 0) {
+                utterance.voice = voices.find(voice => voice.lang === 'en-US') || voices[0];
+            }
+            window.speechSynthesis.speak(utterance);
+            lastSpoken = text;
+        }
+
+        // Voice recognition setup
+        const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+        recognition.continuous = true;
+        recognition.interimResults = false;
+        recognition.lang = 'en-US';
+
+        function startRecognition() {
+            if (!isCommandListening) {
+                try {
+                    recognition.start();
+                    isCommandListening = true;
+                    console.log("Command recognition started.");
+                } catch (e) {
+                    console.error("Recognition start error:", e);
+                    setTimeout(startRecognition, 1000);  // Retry after 1s
+                }
+            }
+        }
+
+        function stopRecognition() {
+            if (isCommandListening) {
+                recognition.stop();
+                isCommandListening = false;
+                console.log("Command recognition stopped.");
+            }
+        }
+
+        recognition.onresult = (event) => {
+            const command = event.results[event.results.length - 1][0].transcript.trim().toLowerCase();
+            console.log("Recognized:", command);
+            fetch('/command', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ command: command })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.message) {
+                    speak(data.message);
+                }
+                if (data.error) console.error('Command error:', data.error);
+            })
+            .catch(error => console.error('Command fetch error:', error));
+        };
+
+        recognition.onerror = (event) => {
+            console.error('Speech recognition error:', event.error);
+            if (event.error === 'no-speech' || event.error === 'aborted') return;
+            speak("Voice recognition stopped due to an error. Restarting after wake word.");
+            stopRecognition();
+        };
+
+        recognition.onend = () => {
+            console.log("Recognition ended.");
+            isCommandListening = false;
+            // Do not automatically restart; wait for wake word
+        };
+
+        async function openCamera() {
+            if (!cameraStream) {
+                try {
+                    cameraStream = await navigator.mediaDevices.getUserMedia({ video: true });
+                    document.getElementById('camera-preview').srcObject = cameraStream;
+                } catch (error) {
+                    console.error('Camera error:', error);
+                    speak("Failed to open camera.");
+                }
+            }
+        }
+
+        function closeCamera() {
+            if (cameraStream) {
+                cameraStream.getTracks().forEach(track => track.stop());
+                cameraStream = null;
+                document.getElementById('camera-preview').srcObject = null;
+            }
+        }
+
+        function captureImage() {
+            const video = document.getElementById('camera-preview');
+            if (!video.videoWidth || !video.videoHeight) {
+                speak("Camera not ready yet. Please wait.");
+                return;
+            }
+            const canvas = document.createElement('canvas');
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            canvas.getContext('2d').drawImage(video, 0, 0);
+            const imageData = canvas.toDataURL('image/jpeg');
+
+            fetch('/detect', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ image: imageData })
+            })
+            .then(res => {
+                if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+                return res.json();
+            })
+            .then(data => {
+                if (data.error) {
+                    document.getElementById('detection-results').textContent = 'Detection failed';
+                    speak("Detection failed.");
+                } else {
+                    const results = data.detected_objects.join(', ') || 'No objects detected';
+                    if (results !== lastResults) {
+                        document.getElementById('detection-results').textContent = results;
+                        speak(`Detected objects: ${results}`);
+                        lastResults = results;
+                    }
+                }
+            })
+            .catch(error => {
+                console.error('Detection fetch error:', error);
+                speak("Error during detection. Please try again.");
+            });
+        }
+
+        function initMap() {
+            if (!map) {
+                map = L.map('map').setView([16.3437, 81.0545], 13);
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    attribution: '© Nikhil srimanth contributors'
+                }).addTo(map);
+                L.marker([16.3437, 81.0545]).addTo(map).bindPopup('Current Location').openPopup();
+                document.getElementById('nav-status').textContent = "Waiting for destination...";
+            }
+        }
+
+        function updateNavigation(destination) {
+            fetch('/navigation')
+            .then(res => {
+                if (!res.ok) throw new Error(`Navigation fetch failed with status: ${res.status}`);
+                return res.json();
+            })
+            .then(data => {
+                if (data.steps && data.steps.length > 0) {
+                    if (routeLayer) map.removeLayer(routeLayer);
+                    const steps = data.steps;
+                    let currentCoords = [16.3437, 81.0545];
+
+                    if (currentStep === 0) {
+                        const totalDistance = steps.reduce((sum, step) => sum + step.distance, 0);
+                        speak(`Calculated distance to ${destination} is ${totalDistance} meters.`);
+                    }
+
+                    if (currentStep < steps.length) {
+                        const step = steps[currentStep];
+                        const announcement = `Step ${currentStep + 1}: ${step.instruction}. Distance: ${step.distance} meters.`;
+                        if (document.getElementById('nav-status').textContent !== announcement) {
+                            document.getElementById('nav-status').textContent = announcement;
+                            speak(announcement);
+                        }
+
+                        currentCoords = step.coordinates;
+                        map.setView(currentCoords, 13);
+                        if (currentStep === 0) {
+                            routeLayer = L.polyline([[16.3437, 81.0545], currentCoords], { color: 'blue' }).addTo(map);
+                        } else {
+                            routeLayer.addLatLng(currentCoords);
+                        }
+
+                        setTimeout(() => {
+                            currentStep++;
+                            if (currentStep >= steps.length) {
+                                speak(`You have arrived at ${destination}.`);
+                                document.getElementById('nav-status').textContent = `Arrived at ${destination}`;
+                            }
+                        }, 2000);
+                    }
+                }
+            })
+            .catch(error => {
+                console.error('Navigation fetch error:', error);
+            });
+        }
+
+        function pollState() {
+            fetch('/state')
+            .then(res => {
+                if (!res.ok) throw new Error(`State fetch failed with status: ${res.status}`);
+                return res.json();
+            })
+            .then(data => {
+                if (data.state !== lastState) {
+                    if (data.state === 'home') {
+                        speak("Home page opened.");
+                    } else if (data.state === 'object_detection') {
+                        speak("Object detection page opened.");
+                    } else if (data.state === 'navigation') {
+                        speak("Navigation page opened. Say your destination.");
+                    }
+                    lastState = data.state;
+                }
+
+                Object.values(screens).forEach(screen => screen.classList.remove('active'));
+                screens[data.state].classList.add('active');
+
+                if (data.state === 'object_detection') {
+                    if (!cameraStream) openCamera();
+                    if (data.pending_action === 'detect') {
+                        setTimeout(captureImage, 500);
+                    }
+                } else {
+                    closeCamera();
+                }
+
+                if (data.state === 'navigation') {
+                    if (!map) initMap();
+                    if (data.destination) {
+                        const navStatus = `Navigating to ${data.destination}`;
+                        if (document.getElementById('nav-status').textContent !== navStatus) {
+                            document.getElementById('nav-status').textContent = navStatus;
+                            speak(`Destination set to ${data.destination}. Navigation started.`);
+                        }
+                        updateNavigation(data.destination);
+                    } else if (document.getElementById('nav-status').textContent !== "Waiting for destination...") {
+                        document.getElementById('nav-status').textContent = "Waiting for destination...";
+                    }
+                }
+
+                if (data.detection_results.length) {
+                    const results = data.detected_objects.join(', ') || 'No objects detected';
+                    if (results !== lastResults) {
+                        document.getElementById('detection-results').textContent = results;
+                        lastResults = results;
+                    }
+                }
+            })
+            .catch(error => {
+                console.error('State polling error:', error);
+            })
+            .finally(() => setTimeout(pollState, 1000));
+        }
+
+        pollState();
+    </script>
+    <script src="https://unpkg.com/@picovoice/web-voice-processor@1.2.0/dist/iife/index.js"></script>
+    <script src="https://unpkg.com/@picovoice/porcupine-web@1.2.0/dist/iife/index.js"></script>
+    
+    <script>
+        let porcupine = null;
+        let wakeWordDetected = false;
+
+        async function initWakeWordDetection() {
+            try {
+                porcupine = await PorcupineWeb.create(
+                    {
+                        accessKey: "YluWAVPbPIxSkJtljSpqvkwYjv72DjE5yn02NorEaVjtKzio8OspNA==",
+                        keywords: ["hey assistant"],
+                        start: wakeWordCallback
+                    }
+                );
+                
+                const audioProcessor = await WebVoiceProcessor.subscribe(porcupine);
+                console.log("Wake word detection started...");
+                speak("Welcome to the Blind Assistance App. Say 'hey jarvis' to start listening for commands.");
+            } catch (error) {
+                console.error("Error initializing Porcupine:", error);
+                speak("Failed to initialize wake word detection.");
+            }
+        }
+
+        function wakeWordCallback(keywordIndex) {
+            console.log("Wake word detected!");
+            if (!wakeWordDetected) {
+                wakeWordDetected = true;
+                speak("Hey Jarvis detected. Now listening for your commands.");
+                startRecognition();
+                setTimeout(() => {
+                    wakeWordDetected = false;
+                    stopRecognition();
+                    speak("Command listening stopped. Say 'hey jarvis' again to resume.");
+                }, 10000);
+            }
+        }
+
+        initWakeWordDetection();
+    </script>
+    <script src="https://unpkg.com/@dotlottie/player-component@2.7.12/dist/dotlottie-player.mjs" type="module"></script>
+    
+</body>
+</html>

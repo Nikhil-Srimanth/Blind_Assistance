@@ -1,0 +1,1156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Voice Assistant Interface for Blind Users</title>
+    <style>
+        :root {
+            --primary-color: #4a6fa5;
+            --secondary-color: #166088;
+            --accent-color: #4cb5ae;
+            --bg-color: #f5f7fa;
+            --text-color: #333;
+            --light-gray: #e1e5eb;
+            --dark-gray: #6c757d;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        header {
+            background: linear-gradient(to right, var(--primary-color), var(--secondary-color));
+            color: white;
+            padding: 1rem;
+            text-align: center;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        
+        main {
+            flex: 1;
+            padding: 1rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+            max-width: 800px;
+            margin: 0 auto;
+            width: 100%;
+        }
+        
+        .conversation-container {
+            flex: 1;
+            background-color: white;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            overflow-y: auto;
+            padding: 1rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+        
+        .message {
+            padding: 0.75rem 1rem;
+            border-radius: 1rem;
+            max-width: 80%;
+            word-break: break-word;
+        }
+        
+        .user-message {
+            background-color: var(--light-gray);
+            align-self: flex-end;
+            border-bottom-right-radius: 0;
+        }
+        
+        .assistant-message {
+            background-color: var(--primary-color);
+            color: white;
+            align-self: flex-start;
+            border-bottom-left-radius: 0;
+        }
+        
+        .controls-container {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+        
+        .input-container {
+            display: flex;
+            gap: 0.5rem;
+        }
+        
+        input {
+            flex: 1;
+            padding: 0.75rem 1rem;
+            border: 1px solid var(--light-gray);
+            border-radius: 5px;
+            font-size: 1rem;
+        }
+        
+        button {
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            border-radius: 5px;
+            padding: 0.75rem 1.25rem;
+            cursor: pointer;
+            font-weight: bold;
+            transition: background-color 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+        }
+        
+        button:hover {
+            background-color: var(--secondary-color);
+        }
+        
+        .buttons-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 0.5rem;
+        }
+        
+        .action-button {
+            background-color: var(--accent-color);
+        }
+        
+        .microphone-button {
+            position: relative;
+            background-color: var(--primary-color);
+            border-radius: 50%;
+            width: 60px;
+            height: 60px;
+            margin: 0 auto;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+        }
+        
+        .microphone-button.listening {
+            background-color: #ff4b4b;
+            animation: pulse 1.5s infinite;
+        }
+        
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+            100% { transform: scale(1); }
+        }
+        
+        .microphone-icon {
+            font-size: 24px;
+            color: white;
+        }
+        
+        .status-indicator {
+            text-align: center;
+            font-size: 0.9rem;
+            color: var(--dark-gray);
+            margin-top: 0.5rem;
+        }
+        
+        .map-container {
+            height: 300px;
+            background-color: var(--light-gray);
+            border-radius: 10px;
+            overflow: hidden;
+            display: none;
+        }
+        
+        .detected-objects {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            margin-top: 1rem;
+        }
+        
+        .object-tag {
+            background-color: var(--accent-color);
+            color: white;
+            padding: 0.25rem 0.5rem;
+            border-radius: 3px;
+            font-size: 0.8rem;
+        }
+        
+        /* Page styling */
+        .page {
+            display: none;
+            flex-direction: column;
+            gap: 1rem;
+            width: 100%;
+        }
+        
+        .page.active {
+            display: flex;
+        }
+        
+        .page-title {
+            font-size: 1.5rem;
+            margin-bottom: 1rem;
+            color: var(--secondary-color);
+        }
+        
+        .command-suggestion {
+            margin-top: 1rem;
+            padding: 0.75rem;
+            background-color: var(--light-gray);
+            border-radius: 8px;
+            font-size: 0.9rem;
+        }
+        
+        .command-list {
+            list-style: none;
+            margin-top: 0.5rem;
+        }
+        
+        .command-list li {
+            margin: 0.25rem 0;
+            color: var(--secondary-color);
+            font-weight: bold;
+        }
+        
+        /* Object detection styling */
+        .video-container {
+            width: 100%;
+            height: 300px;
+            background-color: var(--light-gray);
+            border-radius: 10px;
+            overflow: hidden;
+            position: relative;
+        }
+        
+        #video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        
+        #canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+        
+        .detection-controls {
+            display: flex;
+            gap: 0.5rem;
+            margin-top: 0.5rem;
+        }
+        
+        .detection-stats {
+            background-color: var(--light-gray);
+            padding: 0.5rem;
+            border-radius: 5px;
+            margin-top: 0.5rem;
+            font-size: 0.9rem;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Voice Assistant for Blind Users</h1>
+    </header>
+    
+    <main>
+        <!-- Home page with conversation -->
+        <div class="page active" id="homePage">
+            <div class="conversation-container" id="conversation">
+                <div class="message assistant-message">
+                    Hello! I'm your voice assistant. What can I help you with today?
+                </div>
+            </div>
+            
+            <div class="controls-container">
+                <div class="input-container">
+                    <input type="text" id="textInput" placeholder="Type your message here...">
+                    <button id="sendButton">Send</button>
+                </div>
+                
+                <div class="microphone-button" id="micButton">
+                    <i class="microphone-icon">🎤</i>
+                </div>
+                <div class="status-indicator" id="statusIndicator">Listening mode active</div>
+                
+                <div class="command-suggestion">
+                    <p>Try saying:</p>
+                    <ul class="command-list">
+                        <li>"Go to object detection"</li>
+                        <li>"Open navigation"</li>
+                        <li>"Help me navigate to..."</li>
+                        <li>"What do you see?"</li>
+                        <li>"Go back to home"</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Object Detection page -->
+        <div class="page" id="detectionPage">
+            <h2 class="page-title">Object Detection</h2>
+            
+            <div class="video-container">
+                <video id="video" autoplay muted></video>
+                <canvas id="canvas"></canvas>
+            </div>
+            
+            <div class="detection-controls">
+                <button class="action-button" id="startDetectionButton">Start Detection</button>
+                <button class="action-button" id="stopDetectionButton">Stop Detection</button>
+            </div>
+            
+            <div class="detection-stats" id="detectionStats">
+                Ready to detect objects using YOLOv8
+            </div>
+            
+            <div class="detected-objects" id="detectedObjects"></div>
+            
+            <div class="command-suggestion">
+                <p>Try saying:</p>
+                <ul class="command-list">
+                    <li>"Detect objects"</li>
+                    <li>"What do you see around you?"</li>
+                    <li>"Go back" or "Return home"</li>
+                </ul>
+            </div>
+        </div>
+        
+        <!-- Navigation page -->
+        <div class="page" id="navigationPage">
+            <h2 class="page-title">Navigation</h2>
+            <div class="map-container" id="mapContainer">
+                <div style="padding: 1rem; text-align: center;">Map view will appear here</div>
+            </div>
+            
+            <div class="input-container">
+                <input type="text" id="destinationInput" placeholder="Enter destination (longitude,latitude)">
+                <button id="startNavigationButton">Start Navigation</button>
+            </div>
+            
+            <div class="command-suggestion">
+                <p>Try saying:</p>
+                <ul class="command-list">
+                    <li>"Navigate to Central Park"</li>
+                    <li>"Find directions to the airport"</li>
+                    <li>"Go back" or "Return home"</li>
+                </ul>
+            </div>
+        </div>
+    </main>
+
+    <!-- ONNX Runtime and YOLOv8 Scripts -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/onnxruntime-web/1.14.0/ort.min.js"></script>
+    
+    <script>
+        // DOM Elements
+const conversation = document.getElementById('conversation');
+const textInput = document.getElementById('textInput');
+const sendButton = document.getElementById('sendButton');
+const micButton = document.getElementById('micButton');
+const statusIndicator = document.getElementById('statusIndicator');
+const mapContainer = document.getElementById('mapContainer');
+const detectedObjects = document.getElementById('detectedObjects');
+const destinationInput = document.getElementById('destinationInput');
+const startNavigationButton = document.getElementById('startNavigationButton');
+const startDetectionButton = document.getElementById('startDetectionButton');
+const stopDetectionButton = document.getElementById('stopDetectionButton');
+const video = document.getElementById('video');
+const canvas = document.getElementById('canvas');
+const detectionStats = document.getElementById('detectionStats');
+
+// Page elements
+const homePage = document.getElementById('homePage');
+const detectionPage = document.getElementById('detectionPage');
+const navigationPage = document.getElementById('navigationPage');
+
+// State variables
+let isListening = false;
+let currentPage = 'home';
+let autoRestartRecognition = true;
+let detectionActive = false;
+let yoloModel = null;
+let detectionInterval = null;
+let videoStream = null;
+let wakeWordActive = true;
+let lastWakeTime = 0;
+let wakeCooldown = 5000; // 5 seconds cooldown after handling a command
+let lastRecognizedText = '';
+
+// Wake words and command detection
+const WAKE_WORDS = ['assistant', 'hey assistant', 'help me', 'hello'];
+const PAGE_COMMANDS = {
+    'home': ['go home', 'home page', 'main page', 'go back home', 'return home'],
+    'detection': ['object detection', 'detect objects', 'what do you see', 'scan environment', 'go to detection'],
+    'navigation': ['navigation', 'navigate', 'directions', 'go to navigation', 'find my way']
+};
+const DETECTION_COMMANDS = ['detect objects', 'what do you see', 'scan', 'scan now', 'detect'];
+const NAVIGATION_COMMANDS = ['navigate to', 'directions to', 'take me to', 'find', 'go to'];
+const BACK_COMMANDS = ['go back', 'return', 'previous', 'go back to home'];
+
+// YOLO model configuration (unchanged)
+const modelConfig = {
+    modelPath: 'https://cdn.jsdelivr.net/gh/ultralytics/assets@main/models/yolov8n-320.onnx',
+    classNames: [
+        'person', 'bicycle', 'car', 'motorcycle', 'airplane', 'bus', 'train', 'truck', 'boat',
+        'traffic light', 'fire hydrant', 'stop sign', 'parking meter', 'bench', 'bird', 'cat', 'dog', 'horse',
+        'sheep', 'cow', 'elephant', 'bear', 'zebra', 'giraffe', 'backpack', 'umbrella', 'handbag', 'tie',
+        'suitcase', 'frisbee', 'skis', 'snowboard', 'sports ball', 'kite', 'baseball bat', 'baseball glove',
+        'skateboard', 'surfboard', 'tennis racket', 'bottle', 'wine glass', 'cup', 'fork', 'knife', 'spoon',
+        'bowl', 'banana', 'apple', 'sandwich', 'orange', 'broccoli', 'carrot', 'hot dog', 'pizza', 'donut',
+        'cake', 'chair', 'couch', 'potted plant', 'bed', 'dining table', 'toilet', 'tv', 'laptop', 'mouse',
+        'remote', 'keyboard', 'cell phone', 'microwave', 'oven', 'toaster', 'sink', 'refrigerator', 'book',
+        'clock', 'vase', 'scissors', 'teddy bear', 'hair drier', 'toothbrush'
+    ],
+    modelInputShape: [1, 3, 320, 320],
+    confidenceThreshold: 0.45,
+    iouThreshold: 0.45,
+    modelInputName: 'images',
+    modelOutputName: 'output0'
+};
+
+// Speech recognition setup
+let recognition;
+let recognitionActive = false;
+
+if ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window) {
+    recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+    recognition.continuous = false;
+    recognition.interimResults = false;
+    recognition.lang = 'en-US';
+    
+    recognition.onresult = function(event) {
+        const transcript = event.results[0][0].transcript.toLowerCase();
+        lastRecognizedText = transcript;
+        
+        // Update status display
+        statusIndicator.textContent = `Heard: ${transcript}`;
+        
+        // Process the voice input
+        handleVoiceInput(transcript);
+    };
+    
+    recognition.onend = function() {
+        isListening = false;
+        micButton.classList.remove('listening');
+        
+        // Auto-restart recognition after a brief pause
+        if (autoRestartRecognition) {
+            statusIndicator.textContent = 'Restarting listening...';
+            setTimeout(() => {
+                startVoiceRecognition();
+            }, 300);
+        } else {
+            statusIndicator.textContent = 'Listening paused';
+        }
+    };
+    
+    recognition.onerror = function(event) {
+        console.error('Speech recognition error', event.error);
+        isListening = false;
+        micButton.classList.remove('listening');
+        statusIndicator.textContent = 'Error: ' + event.error;
+        
+        // Try to restart after error (except for some errors)
+        if (event.error !== 'aborted' && event.error !== 'no-speech' && autoRestartRecognition) {
+            setTimeout(() => {
+                startVoiceRecognition();
+            }, 2000);
+        } else {
+            setTimeout(() => {
+                statusIndicator.textContent = 'Listening mode active';
+            }, 2000);
+        }
+    };
+}
+
+// Function to start voice recognition
+function startVoiceRecognition() {
+    if (isListening) return;
+    
+    if (recognition) {
+        isListening = true;
+        micButton.classList.add('listening');
+        statusIndicator.textContent = 'Listening...';
+        
+        try {
+            recognition.start();
+        } catch (error) {
+            console.error('Recognition start error:', error);
+            isListening = false;
+            micButton.classList.remove('listening');
+            statusIndicator.textContent = 'Error starting recognition';
+            
+            if (autoRestartRecognition) {
+                setTimeout(() => {
+                    startVoiceRecognition();
+                }, 3000);
+            }
+        }
+    } else {
+        statusIndicator.textContent = 'Speech recognition not supported';
+    }
+}
+
+// Speech synthesis setup
+const synth = window.speechSynthesis;
+
+// Text-to-speech function
+function speakText(text) {
+    if (synth) {
+        // Pause listening while speaking to avoid feedback
+        if (recognition && isListening) {
+            try {
+                autoRestartRecognition = true;
+                recognition.stop();
+            } catch (e) {
+                console.error('Error stopping recognition before speech:', e);
+            }
+        }
+        
+        // Cancel any ongoing speech
+        synth.cancel();
+        
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.onend = function() {
+            // Resume listening after speaking is done
+            if (!isListening && autoRestartRecognition) {
+                setTimeout(() => {
+                    startVoiceRecognition();
+                }, 500);
+            }
+        };
+        
+        // Set voice properties
+        utterance.rate = 1.0;
+        utterance.pitch = 1.0;
+        utterance.volume = 1.0;
+        
+        // Use a female voice if available
+        const voices = synth.getVoices();
+        for (let i = 0; i < voices.length; i++) {
+            if (voices[i].name.includes('Female') || voices[i].name.includes('female')) {
+                utterance.voice = voices[i];
+                break;
+            }
+        }
+        
+        synth.speak(utterance);
+    }
+}
+
+// Process and respond to voice input
+function handleVoiceInput(transcript) {
+    // Convert to lowercase for easier matching
+    const text = transcript.toLowerCase();
+    console.log('Recognized speech:', text);
+    
+    // Add user message to conversation
+    addUserMessage(transcript);
+    
+    // Check for wake word first if wake word detection is active
+    if (wakeWordActive) {
+        const containsWakeWord = WAKE_WORDS.some(word => text.includes(word));
+        
+        if (containsWakeWord) {
+            // Wake word detected - disable wake word detection temporarily
+            wakeWordActive = false;
+            lastWakeTime = Date.now();
+            
+            speakText("Yes, I'm listening. How can I help you?");
+            addAssistantMessage("Yes, I'm listening. How can I help you?");
+            
+            // Set a timeout to re-enable wake word detection
+            setTimeout(() => {
+                wakeWordActive = true;
+                speakText("I'm now waiting for a wake word.");
+                statusIndicator.textContent = 'Waiting for wake word...';
+            }, wakeCooldown);
+            
+            return;
+        } else {
+            // No wake word found, continue listening
+            console.log('No wake word detected. Continuing to listen...');
+            return;
+        }
+    }
+    
+    // If we get here, either wake word was already detected or not required
+    
+    // Check for navigation commands between pages
+    for (const [page, commands] of Object.entries(PAGE_COMMANDS)) {
+        if (commands.some(cmd => text.includes(cmd))) {
+            navigateToPage(page);
+            speakText(`Navigating to ${page} page.`);
+            addAssistantMessage(`Navigating to ${page} page.`);
+            
+            // Reset wake word detection after command execution
+            setTimeout(() => {
+                wakeWordActive = true;
+                statusIndicator.textContent = 'Waiting for wake word...';
+            }, 1000);
+            
+            return;
+        }
+    }
+    
+    // Check for back commands
+    if (BACK_COMMANDS.some(cmd => text.includes(cmd))) {
+        navigateToPage('home');
+        speakText("Going back to home page.");
+        addAssistantMessage("Going back to home page.");
+        
+        // Reset wake word detection after command execution
+        setTimeout(() => {
+            wakeWordActive = true;
+            statusIndicator.textContent = 'Waiting for wake word...';
+        }, 1000);
+        
+        return;
+    }
+    
+    // Page-specific commands
+    switch (currentPage) {
+        case 'detection':
+            if (DETECTION_COMMANDS.some(cmd => text.includes(cmd))) {
+                speakText("Starting object detection.");
+                addAssistantMessage("Starting object detection.");
+                startObjectDetection();
+                
+                // Reset wake word detection after longer timeout due to detection
+                setTimeout(() => {
+                    wakeWordActive = true;
+                    statusIndicator.textContent = 'Waiting for wake word...';
+                }, 5000);
+                
+                return;
+            }
+            break;
+            
+        case 'navigation':
+            // Check if it's a navigation request (navigate to X)
+            for (const cmd of NAVIGATION_COMMANDS) {
+                if (text.includes(cmd)) {
+                    // Extract destination from command (e.g., "navigate to central park" -> "central park")
+                    const destination = text.substring(text.indexOf(cmd) + cmd.length).trim();
+                    
+                    if (destination) {
+                        speakText(`Setting destination to ${destination}.`);
+                        addAssistantMessage(`Setting destination to ${destination}.`);
+                        destinationInput.value = destination;
+                        // Here you would trigger actual navigation
+                        
+                        // Reset wake word detection after command execution
+                        setTimeout(() => {
+                            wakeWordActive = true;
+                            statusIndicator.textContent = 'Waiting for wake word...';
+                        }, 1000);
+                        
+                        return;
+                    }
+                }
+            }
+            break;
+            
+        case 'home':
+            // Handle general questions or help requests
+            if (text.includes('help') || text.includes('what can you do')) {
+                const helpMessage = "I can help you detect objects around you, navigate to destinations, and provide information. Try saying 'go to object detection' or 'navigate to' followed by a destination.";
+                speakText(helpMessage);
+                addAssistantMessage(helpMessage);
+                
+                // Reset wake word detection after command execution
+                setTimeout(() => {
+                    wakeWordActive = true;
+                    statusIndicator.textContent = 'Waiting for wake word...';
+                }, 1000);
+                
+                return;
+            }
+            break;
+    }
+    
+    // Default response if no command was recognized
+    speakText("I'm not sure what you're asking. Try saying 'help' for a list of commands.");
+    addAssistantMessage("I'm not sure what you're asking. Try saying 'help' for a list of commands.");
+    
+    // Reset wake word detection after default response
+    setTimeout(() => {
+        wakeWordActive = true;
+        statusIndicator.textContent = 'Waiting for wake word...';
+    }, 1000);
+}
+
+// Add user message to conversation
+function addUserMessage(message) {
+    const messageElement = document.createElement('div');
+    messageElement.className = 'message user-message';
+    messageElement.textContent = message;
+    conversation.appendChild(messageElement);
+    conversation.scrollTop = conversation.scrollHeight;
+}
+
+// Add assistant message to conversation
+function addAssistantMessage(message) {
+    const messageElement = document.createElement('div');
+    messageElement.className = 'message assistant-message';
+    messageElement.textContent = message;
+    conversation.appendChild(messageElement);
+    conversation.scrollTop = conversation.scrollHeight;
+}
+
+// Initialize YOLOv8 model
+async function initYOLOModel() {
+    try {
+        detectionStats.textContent = "Loading YOLOv8 model...";
+        
+        // Set ONNX Runtime options
+        const options = {
+            executionProviders: ['wasm'],
+            graphOptimizationLevel: 'all'
+        };
+        
+        // Create ONNX session
+        yoloModel = await ort.InferenceSession.create(modelConfig.modelPath, options);
+        
+        detectionStats.textContent = "YOLOv8 model loaded successfully.";
+        startDetectionButton.disabled = false;
+        
+        return true;
+    } catch (error) {
+        console.error("Failed to load YOLO model:", error);
+        detectionStats.textContent = "Error loading YOLOv8 model: " + error.message;
+        speakText("I had trouble loading the object detection model. Please try again later.");
+        
+        return false;
+    }
+}
+
+// Initialize camera
+async function initCamera() {
+    try {
+        const constraints = {
+            video: {
+                facingMode: 'environment',
+                width: { ideal: 640 },
+                height: { ideal: 480 }
+            }
+        };
+        
+        videoStream = await navigator.mediaDevices.getUserMedia(constraints);
+        video.srcObject = videoStream;
+        
+        return new Promise((resolve) => {
+            video.onloadedmetadata = () => {
+                // Set canvas dimensions to match video
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                resolve(true);
+            };
+        });
+    } catch (error) {
+        console.error("Camera access error:", error);
+        detectionStats.textContent = "Error accessing camera: " + error.message;
+        speakText("I couldn't access your camera. Please check your camera permissions.");
+        
+        return false;
+    }
+}
+
+// Start object detection
+async function startObjectDetection() {
+    if (detectionActive) {
+        speakText("Object detection is already running.");
+        return;
+    }
+    
+    try {
+        detectionStats.textContent = "Starting camera...";
+        
+        // Initialize camera if not already done
+        if (!videoStream) {
+            const cameraInitialized = await initCamera();
+            if (!cameraInitialized) {
+                speakText("Could not initialize camera. Please check your camera permissions.");
+                return;
+            }
+        }
+        
+        // Initialize YOLO model if not already done
+        if (!yoloModel) {
+            const modelInitialized = await initYOLOModel();
+            if (!modelInitialized) {
+                speakText("Could not initialize object detection model. Please try again later.");
+                return;
+            }
+        }
+        
+        detectionActive = true;
+        startDetectionButton.disabled = true;
+        stopDetectionButton.disabled = false;
+        
+        // Start detection loop
+        detectionInterval = setInterval(detectWithYOLO, 500); // Run detection every 500ms for better performance
+        
+        detectionStats.textContent = "Object detection running...";
+        speakText("Object detection started. I'll tell you what I see.");
+    } catch (error) {
+        console.error("Error starting detection:", error);
+        detectionStats.textContent = "Failed to start detection: " + error.message;
+        speakText("Sorry, I couldn't start object detection. " + error.message);
+    }
+}
+
+// Run object detection with YOLOv8
+async function detectWithYOLO() {
+    if (!yoloModel || !detectionActive) return;
+    
+    try {
+        const ctx = canvas.getContext('2d');
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        // Preprocess the image
+        const inputWidth = modelConfig.modelInputShape[2];
+        const inputHeight = modelConfig.modelInputShape[3];
+        const preprocessedData = preprocessImage(video, inputWidth, inputHeight);
+        
+        // Create input tensor
+        const inputTensor = new ort.Tensor(
+            'float32',
+            new Float32Array(preprocessedData),
+            modelConfig.modelInputShape
+        );
+        
+        // Run inference
+        const feeds = {};
+        feeds[modelConfig.modelInputName] = inputTensor;
+        
+        const results = await yoloModel.run(feeds);
+        const output = results[modelConfig.modelOutputName];
+        
+        // Process results
+        const [detections, objectCounts] = processDetections(output.data, output.dims, canvas.width, canvas.height);
+        
+        // Draw the detections
+        drawDetections(ctx, detections);
+        
+        // Update the UI with detected objects
+        const objectSummary = updateDetectedObjects(objectCounts);
+        
+        // In detection mode, speak out the objects only if significant change
+        if (detections.length > 0 && currentPage === 'detection') {
+            // Only speak out results every 3 seconds to avoid overwhelming the user
+            if (!window.lastSpeakTime || Date.now() - window.lastSpeakTime > 3000) {
+                speakText(objectSummary);
+                window.lastSpeakTime = Date.now();
+            }
+        }
+        
+        detectionStats.textContent = `Detected ${detections.length} objects`;
+    } catch (error) {
+        console.error("Detection error:", error);
+        detectionStats.textContent = "Detection error: " + error.message;
+    }
+}
+
+// Preprocess image for YOLO model (unchanged)
+function preprocessImage(image, modelWidth, modelHeight) {
+    // ... (existing implementation unchanged) ...
+    const ctx = canvas.getContext('2d');
+    
+    // Draw the current video frame to the canvas
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    
+    // Get the image data
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const pixels = imageData.data;
+    
+    // Prepare input tensor
+    const [redArray, greenArray, blueArray] = [[], [], []];
+    
+    // Resize and normalize pixel values
+    const stride = canvas.width / modelWidth;
+    
+    for (let y = 0; y < modelHeight; y++) {
+        for (let x = 0; x < modelWidth; x++) {
+            const sourceX = Math.floor(x * stride);
+            const sourceY = Math.floor(y * stride);
+            const pixelIndex = (sourceY * canvas.width + sourceX) * 4;
+            
+            // Normalize to [0, 1] and extract RGB channels
+            redArray.push(pixels[pixelIndex] / 255.0);
+            greenArray.push(pixels[pixelIndex + 1] / 255.0);
+            blueArray.push(pixels[pixelIndex + 2] / 255.0);
+        }
+    }
+    
+    // Return the preprocessed data in the format expected by the model
+    return [...redArray, ...greenArray, ...blueArray];
+}
+
+// Process raw detection outputs (unchanged)
+function processDetections(outputData, outputDims, canvasWidth, canvasHeight) {
+    // ... (existing implementation unchanged) ...
+    const detections = [];
+    const objectCounts = {};
+    
+    const rows = outputDims[1]; // Number of detections
+    const cols = outputDims[2]; // 4 box coordinates + 1 confidence + n class probabilities
+    
+    // Scale factors to convert from model coordinates to canvas
+    const xScale = canvasWidth / modelConfig.modelInputShape[2];
+    const yScale = canvasHeight / modelConfig.modelInputShape[3];
+    
+    for (let i = 0; i < rows; i++) {
+        const rowOffset = i * cols;
+        
+        // Extract confidence
+        const confidence = outputData[rowOffset + 4];
+        
+        if (confidence < modelConfig.confidenceThreshold) continue;
+        
+        // Find class with highest probability
+        let maxClassProb = 0;
+        let classIndex = -1;
+        
+        for (let j = 5; j < cols; j++) {
+            const classProb = outputData[rowOffset + j];
+            if (classProb > maxClassProb) {
+                maxClassProb = classProb;
+                classIndex = j - 5;
+            }
+        }
+        
+        // Skip if no class was detected with high enough probability
+        if (maxClassProb < modelConfig.confidenceThreshold) continue;
+        
+        // Get box coordinates (xywh format from YOLO)
+        const x = outputData[rowOffset];
+        const y = outputData[rowOffset + 1];
+        const w = outputData[rowOffset + 2];
+        const h = outputData[rowOffset + 3];
+        
+        // Convert from xywh to xyxy (corner coordinates)
+        const x1 = (x - w/2) * xScale;
+        const y1 = (y - h/2) * yScale;
+        const x2 = (x + w/2) * xScale;
+        const y2 = (y + h/2) * yScale;
+        
+        const className = modelConfig.classNames[classIndex];
+        
+        // Add to detections array
+        detections.push({
+            box: [x1, y1, x2, y2],
+            confidence: confidence,
+            class: className
+        });
+        
+        // Count occurrences of each object type
+        if (!objectCounts[className]) {
+            objectCounts[className] = 1;
+        } else {
+            objectCounts[className]++;
+        }
+    }
+    
+    return [detections, objectCounts];
+}
+
+// Draw bounding boxes for detected objects (unchanged)
+function drawDetections(ctx, detections) {
+    // ... (existing implementation unchanged) ...
+    // Clear previous drawings
+    ctx.lineWidth = 2;
+    ctx.font = '14px Arial';
+    
+    detections.forEach(detection => {
+        const [x1, y1, x2, y2] = detection.box;
+        const label = `${detection.class} ${(detection.confidence * 100).toFixed(1)}%`;
+        
+        // Generate a color based on class name
+        const hue = Math.abs(detection.class.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0)) % 360;
+        const color = `hsl(${hue}, 100%, 40%)`;
+        
+        // Draw box
+        ctx.strokeStyle = color;
+        ctx.beginPath();
+        ctx.rect(x1, y1, x2 - x1, y2 - y1);
+        ctx.stroke();
+        
+        // Draw label background
+        ctx.fillStyle = color;
+        const textWidth = ctx.measureText(label).width;
+        ctx.fillRect(x1, y1 - 20, textWidth + 10, 20);
+        
+        // Draw label text
+        ctx.fillStyle = 'white';
+        ctx.fillText(label, x1 + 5, y1 - 5);
+    });
+}
+
+// Update detected objects UI
+function updateDetectedObjects(objectCounts) {
+    detectedObjects.innerHTML = '';
+    
+    const objectsList = Object.entries(objectCounts)
+        .sort((a, b) => b[1] - a[1]) // Sort by count (descending)
+        .map(([className, count]) => ({ className, count }));
+    
+    // Create a readable list for speech
+    let objectsText = "";
+    
+    if (objectsList.length === 0) {
+        objectsText = "No objects detected.";
+    } else {
+        objectsText = "I can see: ";
+        
+        objectsList.forEach(obj => {
+            // Create visual tag
+            const tag = document.createElement('span');
+            tag.className = 'object-tag';
+            tag.textContent = `${obj.className} (${obj.count})`;
+            detectedObjects.appendChild(tag);
+            
+            // Add to speech text
+            objectsText += `${obj.count} ${obj.className}, `;
+        });
+        
+        // Remove trailing comma and space
+        objectsText = objectsText.slice(0, -2);
+    }
+    
+    return objectsText;
+}
+
+// Stop object detection
+function stopObjectDetection() {
+    if (!detectionActive) return;
+    
+    // Clear detection interval
+    if (detectionInterval) {
+        clearInterval(detectionInterval);
+        detectionInterval = null;
+    }
+    
+    detectionActive = false;
+    startDetectionButton.disabled = false;
+    stopDetectionButton.disabled = true;
+    
+    detectionStats.textContent = "Detection stopped.";
+    speakText("Object detection stopped.");
+}
+
+// Page navigation
+function navigateToPage(pageName) {
+    // Hide all pages
+    homePage.classList.remove('active');
+    detectionPage.classList.remove('active');
+    navigationPage.classList.remove('active');
+    
+    // Show selected page
+    switch(pageName) {
+        case 'home':
+            homePage.classList.add('active');
+            mapContainer.style.display = 'none';
+            // Stop detection if active
+            if (detectionActive) {
+                stopObjectDetection();
+            }
+            currentPage = 'home';
+            break;
+        case 'detection':
+            detectionPage.classList.add('active');
+            detectedObjects.innerHTML = '';
+            currentPage = 'detection';
+            break;
+        case 'navigation':
+            navigationPage.classList.add('active');
+            mapContainer.style.display = 'block';
+            // Stop detection if active
+            if (detectionActive) {
+                stopObjectDetection();
+            }
+            currentPage = 'navigation';
+            break;
+        default:
+            homePage.classList.add('active');
+            currentPage = 'home';
+    }
+}
+
+// Initialize everything when the page loads
+document.addEventListener('DOMContentLoaded', () => {
+    // Welcome message and instructions
+    setTimeout(() => {
+        speakText("Welcome to the voice assistant for blind users. Say 'assistant' to wake me up, then give a command like 'go to object detection' or 'help'.");
+        addAssistantMessage("Welcome to the voice assistant for blind users. Say 'assistant' to wake me up, then give a command like 'go to object detection' or 'help'.");
+        
+        // Start listening
+        startVoiceRecognition();
+        statusIndicator.textContent = 'Waiting for wake word...';
+    }, 1000);
+    
+    // Set up button click events
+    sendButton.addEventListener('click', () => {
+        const text = textInput.value.trim();
+        if (text) {
+            handleVoiceInput(text);
+            textInput.value = '';
+        }
+    });
+    
+    micButton.addEventListener('click', () => {
+        if (isListening) {
+            try {
+                recognition.stop();
+                autoRestartRecognition = false;
+            } catch (e) {
+                console.error('Error stopping recognition:', e);
+            }
+        } else {
+            autoRestartRecognition = true;
+            startVoiceRecognition();
+        }
+    });
+    
+    startDetectionButton.addEventListener('click', startObjectDetection);
+    stopDetectionButton.addEventListener('click', stopObjectDetection);
+    
+    startNavigationButton.addEventListener('click', () => {
+        const destination = destinationInput.value.trim();
+        if (destination) {
+            speakText(`Setting destination to ${destination}.`);
+            addAssistantMessage(`Setting destination to ${destination}.`);
+        } else {
+            speakText("Please specify a destination.");
+            addAssistantMessage("Please specify a destination.");
+        }
+    });
+    
+    // Allow submitting text input with Enter key
+    textInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+            sendButton.click();
+        }
+    });
+});
+</script>
+</body>
+</html>

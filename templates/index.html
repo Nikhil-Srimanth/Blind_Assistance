@@ -1,0 +1,678 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Blind Assistant Web App</title>
+    <style>
+        /* Main Styles */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Arial', sans-serif;
+        }
+        body {
+            background-color: #f0f2f5;
+            color: #333;
+        }
+        .app-container {
+            width: 100%;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        /* Screen Styles */
+        .screen {
+            display: none;
+            width: 100%;
+            height: calc(100vh - 40px);
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+        }
+        .screen.active {
+            display: block;
+        }
+        .screen-content {
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+        }
+        
+        /* Text Styles */
+        h1 {
+            font-size: 2rem;
+            margin-bottom: 1.5rem;
+            text-align: center;
+            color: #2c3e50;
+        }
+        p {
+            margin-bottom: 1rem;
+            font-size: 1.2rem;
+            text-align: center;
+        }
+        .error-message {
+            color: #e74c3c;
+            font-weight: bold;
+        }
+        
+        /* Button Styles */
+        .btn {
+            padding: 12px 20px;
+            background-color: #3498db;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            margin-top: auto;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        .btn:hover {
+            background-color: #2980b9;
+        }
+        .btn-container {
+            display: flex;
+            justify-content: space-between;
+            margin-top: auto;
+        }
+        
+        /* Camera container */
+        #camera-container {
+            position: relative;
+            width: 100%;
+            height: 60vh;
+            overflow: hidden;
+            background-color: #222;
+            border-radius: 8px;
+            margin-bottom: 1rem;
+        }
+        #camera-preview {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        #detection-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+        
+        /* Map container */
+        #map-container {
+            width: 100%;
+            height: 60vh;
+            border-radius: 8px;
+            margin-bottom: 1rem;
+        }
+
+        /* Results container */
+        .results-container {
+            background-color: #f8f9fa;
+            border-radius: 8px;
+            padding: 10px;
+            margin-bottom: 1rem;
+            max-height: 150px;
+            overflow-y: auto;
+        }
+        
+        /* Status indicators */
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 1rem;
+        }
+        .status-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+        .status-dot.active {
+            background-color: #2ecc71;
+        }
+        .status-dot.inactive {
+            background-color: #e74c3c;
+        }
+        
+        /* Mode toggles */
+        .mode-toggles {
+            display: flex;
+            justify-content: center;
+            margin-bottom: 1rem;
+        }
+        .mode-toggle {
+            padding: 8px 16px;
+            background-color: #ecf0f1;
+            border: 1px solid #bdc3c7;
+            border-radius: 4px;
+            margin: 0 5px;
+            cursor: pointer;
+        }
+        .mode-toggle.active {
+            background-color: #3498db;
+            color: white;
+            border-color: #3498db;
+        }
+    </style>
+    <!-- Leaflet CSS for maps -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" />
+</head>
+<body>
+    <div class="app-container">
+        <!-- Main Screen (Voice Input Screen) -->
+        <div id="voice-screen" class="screen active">
+            <div class="screen-content">
+                <h1>Blind Assistant</h1>
+                
+                <div class="status-indicator">
+                    <div id="listening-dot" class="status-dot inactive"></div>
+                    <p id="status-label">Voice recognition inactive</p>
+                </div>
+                
+                <div class="results-container">
+                    <p id="command-label">Say "open camera", "detect objects", or "open navigation"</p>
+                    <p id="error-label" class="error-message"></p>
+                </div>
+                
+                <div class="btn-container">
+                    <button id="start-listening-btn" class="btn">Start Listening</button>
+                    <button id="stop-listening-btn" class="btn">Stop Listening</button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Object Detection Screen -->
+        <div id="object-screen" class="screen">
+            <div class="screen-content">
+                <h1>Object Detection</h1>
+                
+                <div id="camera-container">
+                    <video id="camera-preview" autoplay playsinline></video>
+                    <canvas id="detection-canvas"></canvas>
+                </div>
+                
+                <div class="mode-toggles">
+                    <div id="single-mode" class="mode-toggle active">Single Detection</div>
+                    <div id="continuous-mode" class="mode-toggle">Continuous Detection</div>
+                </div>
+                
+                <div class="results-container">
+                    <p id="detection-results">No objects detected yet</p>
+                    <p id="detection-error" class="error-message"></p>
+                </div>
+                
+                <div class="btn-container">
+                    <button id="detect-btn" class="btn">Detect Objects</button>
+                    <button id="back-from-object" class="btn">Back to Main</button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Navigation Screen -->
+        <div id="navigation-screen" class="screen">
+            <div class="screen-content">
+                <h1>Navigation</h1>
+                
+                <div id="map-container"></div>
+                
+                <div class="results-container">
+                    <p id="nav-status">Enter destination or use voice command</p>
+                    <p id="nav-error" class="error-message"></p>
+                </div>
+                
+                <div class="btn-container">
+                    <button id="back-from-nav" class="btn">Back to Main</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Load required libraries -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+    
+    <script>
+        // Global variables
+        let ttsQueue = [];
+        let isSpeaking = false;
+        let cameraStream = null;
+        let detectionInterval = null;
+        let listeningActive = false;
+        let cameraActive = false;
+        let detectionMode = "single";
+        let map = null;
+        
+        // DOM elements
+        const voiceScreen = document.getElementById('voice-screen');
+        const objectScreen = document.getElementById('object-screen');
+        const navigationScreen = document.getElementById('navigation-screen');
+        const statusLabel = document.getElementById('status-label');
+        const listeningDot = document.getElementById('listening-dot');
+        const commandLabel = document.getElementById('command-label');
+        const errorLabel = document.getElementById('error-label');
+        const detectionResults = document.getElementById('detection-results');
+        const detectionError = document.getElementById('detection-error');
+        const navStatus = document.getElementById('nav-status');
+        const navError = document.getElementById('nav-error');
+        const cameraPreview = document.getElementById('camera-preview');
+        const detectionCanvas = document.getElementById('detection-canvas');
+        
+        // Event listeners for buttons
+        document.addEventListener('DOMContentLoaded', function() {
+            // Start/Stop listening buttons
+            document.getElementById('start-listening-btn').addEventListener('click', startListening);
+            document.getElementById('stop-listening-btn').addEventListener('click', stopListening);
+            
+            // Navigation between screens
+            document.getElementById('back-from-object').addEventListener('click', function() {
+                closeCamera();
+                showScreen('voice-screen');
+            });
+            
+            document.getElementById('back-from-nav').addEventListener('click', function() {
+                showScreen('voice-screen');
+            });
+            
+            // Object detection button
+            document.getElementById('detect-btn').addEventListener('click', detectObjects);
+            
+            // Mode toggles
+            document.getElementById('single-mode').addEventListener('click', function() {
+                setDetectionMode('single');
+            });
+            
+            document.getElementById('continuous-mode').addEventListener('click', function() {
+                setDetectionMode('continuous');
+            });
+            
+            // Initialize the app
+            initializeApp();
+        });
+        
+        // Initialize the application
+        function initializeApp() {
+            // Check for browser compatibility
+            if (!window.SpeechRecognition && !window.webkitSpeechRecognition) {
+                errorLabel.textContent = "Speech recognition not supported in this browser";
+                speak("Your browser does not support speech recognition");
+                return;
+            }
+            
+            // Initialize UI
+            updateStatusUI();
+            
+            // Auto-start listening (optional)
+            // startListening();
+        }
+        
+        // Speech synthesis function
+        function speak(text) {
+            // Add to queue
+            ttsQueue.push(text);
+            
+            // Process queue if not currently speaking
+            if (!isSpeaking) {
+                processTTSQueue();
+            }
+        }
+        
+        // Process text-to-speech queue
+        function processTTSQueue() {
+            if (ttsQueue.length === 0) {
+                isSpeaking = false;
+                return;
+            }
+            
+            isSpeaking = true;
+            const text = ttsQueue.shift();
+            
+            // Use server-side TTS via fetch API
+            fetch('/speak', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ text: text })
+            })
+            .then(response => response.json())
+            .then(data => {
+                // After speech completes (estimated time based on length)
+                const estimatedSpeechTime = text.length * 80; // ~80ms per character
+                setTimeout(() => {
+                    processTTSQueue();
+                }, estimatedSpeechTime);
+            })
+            .catch(error => {
+                console.error('Error with text-to-speech:', error);
+                processTTSQueue(); // Continue with queue despite error
+            });
+            
+            // Fallback to browser's speech synthesis if server is unavailable
+            if (window.speechSynthesis) {
+                const utterance = new SpeechSynthesisUtterance(text);
+                window.speechSynthesis.speak(utterance);
+                
+                utterance.onend = function() {
+                    processTTSQueue();
+                };
+                
+                utterance.onerror = function() {
+                    console.error('Browser TTS error');
+                    processTTSQueue();
+                };
+            }
+        }
+        
+        // Start voice recognition
+        function startListening() {
+            if (listeningActive) return;
+            
+            fetch('/start_listening', {
+                method: 'POST'
+            })
+            .then(response => response.json())
+            .then(data => {
+                listeningActive = true;
+                updateStatusUI();
+                speak("Voice recognition activated");
+                
+                // Start polling for commands
+                pollForCommands();
+            })
+            .catch(error => {
+                console.error('Error starting listening:', error);
+                errorLabel.textContent = "Failed to start voice recognition";
+            });
+        }
+        
+        // Stop voice recognition
+        function stopListening() {
+            if (!listeningActive) return;
+            
+            fetch('/stop_listening', {
+                method: 'POST'
+            })
+            .then(response => response.json())
+            .then(data => {
+                listeningActive = false;
+                updateStatusUI();
+                speak("Voice recognition deactivated");
+            })
+            .catch(error => {
+                console.error('Error stopping listening:', error);
+                errorLabel.textContent = "Failed to stop voice recognition";
+            });
+        }
+        
+        // Poll for commands recognized by the server
+        function pollForCommands() {
+            if (!listeningActive) return;
+            
+            fetch('/camera_status')
+            .then(response => response.json())
+            .then(data => {
+                // Update UI based on status
+                listeningActive = data.listening_active;
+                cameraActive = data.camera_active;
+                detectionMode = data.detection_mode;
+                
+                updateStatusUI();
+                
+                // If current screen doesn't match status, update it
+                if (cameraActive && voiceScreen.classList.contains('active')) {
+                    showScreen('object-screen');
+                }
+                
+                // Continue polling
+                setTimeout(pollForCommands, 1000);
+            })
+            .catch(error => {
+                console.error('Error polling for commands:', error);
+                // Retry after error
+                setTimeout(pollForCommands, 3000);
+            });
+        }
+        
+        // Update the UI to reflect current status
+        function updateStatusUI() {
+            // Update listening indicator
+            if (listeningActive) {
+                listeningDot.className = 'status-dot active';
+                statusLabel.textContent = "Voice recognition active";
+            } else {
+                listeningDot.className = 'status-dot inactive';
+                statusLabel.textContent = "Voice recognition inactive";
+            }
+            
+            // Update detection mode toggles
+            if (detectionMode === "single") {
+                document.getElementById('single-mode').className = 'mode-toggle active';
+                document.getElementById('continuous-mode').className = 'mode-toggle';
+            } else {
+                document.getElementById('single-mode').className = 'mode-toggle';
+                document.getElementById('continuous-mode').className = 'mode-toggle active';
+            }
+        }
+        
+        // Show a specific screen
+        function showScreen(screenId) {
+            voiceScreen.classList.remove('active');
+            objectScreen.classList.remove('active');
+            navigationScreen.classList.remove('active');
+            
+            document.getElementById(screenId).classList.add('active');
+            
+            if (screenId === 'object-screen') {
+                openCamera();
+                speak("Object detection page is now open");
+            } else if (screenId === 'navigation-screen') {
+                initializeMap();
+                speak("Navigation page is now open");
+            }
+        }
+        
+        // Open camera for object detection
+        function openCamera() {
+            if (cameraActive) return;
+            
+            // Use server-side camera if direct access not possible
+            fetch('/camera_status')
+            .then(response => response.json())
+            .then(data => {
+                if (!data.camera_active) {
+                    // Request camera to be opened on server
+                    speak("Opening camera");
+                    
+                    // For direct camera access (when possible):
+                    navigator.mediaDevices.getUserMedia({ video: true })
+                    .then(stream => {
+                        cameraStream = stream;
+                        cameraPreview.srcObject = stream;
+                        cameraActive = true;
+                        updateStatusUI();
+                        
+                        // Start continuous detection if in that mode
+                        if (detectionMode === "continuous") {
+                            startContinuousDetection();
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error accessing camera:', error);
+                        detectionError.textContent = "Failed to access camera directly";
+                        
+                        // Request camera access via server instead
+                        requestServerCamera();
+                    });
+                } else {
+                    cameraActive = true;
+                    updateStatusUI();
+                    speak("Camera is already open");
+                }
+            })
+            .catch(error => {
+                console.error('Error checking camera status:', error);
+                requestServerCamera();
+            });
+        }
+        
+        // Request camera to be opened on server
+        function requestServerCamera() {
+            fetch('/speak', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ text: "Opening camera on server" })
+            })
+            .then(() => {
+                // We'll rely on polling to update the camera status
+                cameraActive = true;
+            });
+        }
+        
+        // Close camera
+        function closeCamera() {
+            // Stop continuous detection if active
+            if (detectionInterval) {
+                clearInterval(detectionInterval);
+                detectionInterval = null;
+            }
+            
+            // Close local camera if open
+            if (cameraStream) {
+                cameraStream.getTracks().forEach(track => track.stop());
+                cameraStream = null;
+                cameraPreview.srcObject = null;
+            }
+            
+            // Request server to close camera
+            fetch('/speak', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ text: "Closing camera" })
+            });
+            
+            cameraActive = false;
+            updateStatusUI();
+        }
+        
+        // Set detection mode (single or continuous)
+        function setDetectionMode(mode) {
+            if (mode === detectionMode) return;
+            
+            fetch('/set_detection_mode', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ mode: mode })
+            })
+            .then(response => response.json())
+            .then(data => {
+                detectionMode = mode;
+                updateStatusUI();
+                
+                if (mode === "continuous" && cameraActive) {
+                    speak("Starting continuous detection");
+                    startContinuousDetection();
+                } else if (mode === "single") {
+                    speak("Switching to single detection mode");
+                    if (detectionInterval) {
+                        clearInterval(detectionInterval);
+                        detectionInterval = null;
+                    }
+                }
+            })
+            .catch(error => {
+                console.error('Error setting detection mode:', error);
+                speak("Failed to set detection mode");
+            });
+        }
+        
+        // Start continuous object detection
+        function startContinuousDetection() {
+            if (detectionInterval) {
+                clearInterval(detectionInterval);
+            }
+            
+            // Poll for detection results every 2 seconds
+            detectionInterval = setInterval(() => {
+                updateDetectionResults();
+            }, 2000);
+        }
+        
+        // Update detection results from server
+        function updateDetectionResults() {
+            fetch('/get_detection_results')
+            .then(response => response.json())
+            .then(data => {
+                if (data.detected_objects && data.detected_objects.length > 0) {
+                    const objects = data.detected_objects;
+                    detectionResults.textContent = `Detected: ${objects.join(', ')}`;
+                }
+            })
+            .catch(error => {
+                console.error('Error getting detection results:', error);
+            });
+        }
+        
+        // Detect objects (single detection)
+        function detectObjects() {
+            if (!cameraActive) {
+                speak("Camera is not active");
+                return;
+            }
+            
+            speak("Detecting objects");
+            detectionResults.textContent = "Processing...";
+            
+            fetch('/detect', {
+                method: 'POST'
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.detected_objects && data.detected_objects.length > 0) {
+                    const objects = data.detected_objects;
+                    detectionResults.textContent = `Detected: ${objects.join(', ')}`;
+                    speak(`I detected ${objects.length} objects: ${objects.join(', ')}`);
+                } else {
+                    detectionResults.textContent = "No objects detected";
+                    speak("No objects detected");
+                }
+            })
+            .catch(error => {
+                console.error('Error detecting objects:', error);
+                detectionError.textContent = "Detection failed";
+                speak("Detection failed");
+            });
+        }
+        
+        // Initialize map for navigation
+        function initializeMap() {
+            if (map) return;
+            
+            const mapContainer = document.getElementById('map-container');
+            map = L.map(mapContainer).setView([16.3437, 81.0545], 13);
+            
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+            }).addTo(map);
+            
+            // Add current location marker
+            L.marker([16.3437, 81.0545]).addTo(map)
+                .bindPopup('Current Location')
+                .openPopup();
+                
+            speak("Map initialized. Please specify your destination.");
+        }
+    </script>
+</body>
+</html>
